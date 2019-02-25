@@ -30,7 +30,7 @@ namespace AWSCliExtender
                         {
                             case "CREATE-POLICY-EXT":
                                 {
-                                    IAM.CreatePolicyExt(ArgumentParser.ArgsDict["--POLICY-NAME"], ArgumentParser.ArgsDict["--POLICY-DOCUMENT-FILE-PATH"], ArgumentParser.ArgsDict.ContainsKey("--NO-SET-AS-DEFAULT"), ArgumentParser.ArgsDict.ContainsKey("--NO-REMOVE-OLDEST-POLICY-VERSION"));
+                                    IAM.CreatePolicyExt(ArgumentParser.ArgsDict["--POLICY-NAME"], ArgumentParser.ArgsDict["--POLICY-DOCUMENT-FILE-PATH"], ArgumentParser.ArgsDict.ContainsKey("--PATH") ? ArgumentParser.ArgsDict["--PATH"] : null, ArgumentParser.ArgsDict.ContainsKey("--NO-SET-AS-DEFAULT"), ArgumentParser.ArgsDict.ContainsKey("--NO-REMOVE-OLDEST-POLICY-VERSION"));
                                     break;
                                 }
                         }
