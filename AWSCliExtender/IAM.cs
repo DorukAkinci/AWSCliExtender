@@ -12,6 +12,8 @@ namespace AWSCliExtender
 {
     static class IAM
     {
+        private static AmazonIdentityManagementServiceClient _iamClient;
+
         /// <summary>
         /// Function is combining CreatePolicy and CreatePolicyVersion commands to the one and extend their functionalities.
         /// 
@@ -28,44 +30,62 @@ namespace AWSCliExtender
         /// <para>Automatically remove the oldest policy when you reach five policy versions. if argument --no-remove-oldest-policy-version is set, this feature will be disabled and you have to manually delete the policy version before add a new one.</para>
         /// <para>Automatically create the policy if there is not already created.</para>
         /// </summary>
-        public static void CreatePolicyExt(string PolicyName, string PolicyFilePath, bool NoSetAsDefault = false, bool NoRemoveOldestPolicyVersion = false)
+        public static void CreatePolicyExt(string PolicyName, string PolicyFilePath, string Path = null, bool NoSetAsDefault = false, bool NoRemoveOldestPolicyVersion = false)
         {
             try
             {
-                using (AmazonIdentityManagementServiceClient _iamClient = new AmazonIdentityManagementServiceClient(AWSCredential.Profile.Options.AccessKey, AWSCredential.Profile.Options.SecretKey, RegionEndpoint.USEast1))
+                _iamClient = new AmazonIdentityManagementServiceClient(AWSCredential.Profile, RegionEndpoint.USEast1);
+
+                var policy = System.IO.File.ReadAllText(PolicyFilePath);
+
+                try
                 {
-                    var policy = System.IO.File.ReadAllText(PolicyFilePath);
+                    _iamClient.CreatePolicy(new CreatePolicyRequest { PolicyName = PolicyName, PolicyDocument = policy, Path = Path ?? null });
+                }
+                catch (Amazon.IdentityManagement.Model.EntityAlreadyExistsException ex)
+                {
+                    // Policy is already created. Create a new policy version and set.
+                    Console.WriteLine(ex.Message + " Trying to create a new policy version.");
 
-                    try
-                    {
-                        _iamClient.CreatePolicy(new CreatePolicyRequest { PolicyName = PolicyName, PolicyDocument = policy });
-                    }
-                    catch (Amazon.IdentityManagement.Model.EntityAlreadyExistsException ex)
-                    {
-                        // Policy is already created. Create a new policy version and set.
-                        Console.WriteLine(ex.Message + " Trying to create a new policy version.");
+                    string _policyARN = "arn:aws:iam::" + AWSCredential.Account + ":policy" + (Path ?? "/") + PolicyName;
 
-                        string _policyARN = "arn:aws:iam::" + AWSCredential.Account + ":policy/" + PolicyName;
-                        Console.WriteLine(_policyARN);
-                        var _policyList = _iamClient.ListPolicyVersions(new ListPolicyVersionsRequest { PolicyArn = _policyARN });
-                        if ((_policyList.Versions.Count == 5) && (!(NoRemoveOldestPolicyVersion)))
-                        {
-                            /// Policy has maximum policy versions. Oldest one has to be delete to continue.
-                            var _oldestPolicyVersion = _policyList.Versions.Where(q => (!(q.IsDefaultVersion))).OrderBy(q => q.CreateDate).Select(q => q.VersionId).First();
-                            _iamClient.DeletePolicyVersion(new DeletePolicyVersionRequest { PolicyArn = _policyARN, VersionId = _oldestPolicyVersion });
-                            Console.WriteLine("The oldest policy version is deleted: " + _oldestPolicyVersion);
-                        }
-                        _iamClient.CreatePolicyVersion(new CreatePolicyVersionRequest { PolicyArn = _policyARN, PolicyDocument = policy, SetAsDefault = (!(NoSetAsDefault)) });
-                        Console.WriteLine("Policy is created.");
+                    Console.WriteLine(_policyARN);
+
+                    var _policyList = _iamClient.ListPolicyVersions(new ListPolicyVersionsRequest { PolicyArn = _policyARN });
+                    if ((_policyList.Versions.Count == 5) && (!(NoRemoveOldestPolicyVersion)))
+                    {
+                        /// Policy has maximum policy versions. Oldest one has to be delete to continue.
+                        var _oldestPolicyVersion = _policyList.Versions.Where(q => (!(q.IsDefaultVersion))).OrderBy(q => q.CreateDate).Select(q => q.VersionId).First();
+                        _iamClient.DeletePolicyVersion(new DeletePolicyVersionRequest { PolicyArn = _policyARN, VersionId = _oldestPolicyVersion });
+                        Console.WriteLine("The oldest policy version is deleted: " + _oldestPolicyVersion);
                     }
+                    _iamClient.CreatePolicyVersion(new CreatePolicyVersionRequest { PolicyArn = _policyARN, PolicyDocument = policy, SetAsDefault = (!(NoSetAsDefault)) });
+                    Console.WriteLine("Policy is created.");
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine("********ERR: " + ex.Message);
-                throw ex;
+            }
+            finally
+            {
+                _iamClient.Dispose();
             }
         }
 
+
+        private static List<ManagedPolicy> AWSListPolicies()
+        {
+            var _return = new List<ManagedPolicy>();
+
+            var _getPolicies = _iamClient.ListPolicies(new ListPoliciesRequest { });
+            while (_getPolicies.IsTruncated)
+            {
+                _getPolicies = _iamClient.ListPolicies(new ListPoliciesRequest { Marker = _getPolicies.Marker });
+                _return.AddRange(_getPolicies.Policies);
+            }
+
+            return _return;
+        }
     }
 }

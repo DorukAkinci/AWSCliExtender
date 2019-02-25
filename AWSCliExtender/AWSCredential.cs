@@ -15,7 +15,7 @@ namespace AWSCliExtender
 {
     static class AWSCredential
     {
-        public static CredentialProfile Profile;
+        public static AWSCredentials Profile;
 
         private static SharedCredentialsFile _sharedCredentialsFile;
 
@@ -27,20 +27,21 @@ namespace AWSCliExtender
         public static void Initialize(string ProfileName)
         {
             _sharedCredentialsFile = new SharedCredentialsFile();
-            Profile = GetAWSCredentialProfile(ProfileName);
+            CredentialProfile _credentialProfile = GetAWSCredentialProfile(ProfileName);
+            Profile = new SessionAWSCredentials(_credentialProfile.Options.AccessKey, _credentialProfile.Options.SecretKey, _credentialProfile.Options.Token);    
             GetUserIdentity();
         }
 
         public static void Initialize(string AccessKey, string SecretKey)
         {
             _sharedCredentialsFile = new SharedCredentialsFile();
-            Profile = new CredentialProfile("AWSCliExtender", new CredentialProfileOptions { AccessKey = AccessKey, SecretKey = SecretKey });
+            Profile = new BasicAWSCredentials(AccessKey, SecretKey);
             GetUserIdentity();
         }
 
         private static void GetUserIdentity()
         {
-            using (AmazonSecurityTokenServiceClient _stsClient = new AmazonSecurityTokenServiceClient(Profile.Options.AccessKey, Profile.Options.SecretKey, RegionEndpoint.USEast1))
+            using (AmazonSecurityTokenServiceClient _stsClient = new AmazonSecurityTokenServiceClient(Profile, RegionEndpoint.USEast1))
             {
                 var _response = _stsClient.GetCallerIdentity(new GetCallerIdentityRequest { });
                 Account = _response.Account;
